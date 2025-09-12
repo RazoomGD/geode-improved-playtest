@@ -1,0 +1,14 @@
+{
+	"geode": "4.7.0",
+	"gd": {
+		"win": "2.2074",
+		"android": "2.2074",
+		"mac": "2.2074",
+		"ios": "2.2074"
+	},
+	"id": "razoom.playtest_camera_settings",
+	"name": "Playtest Camera Settings",
+	"version": "v1.0.0",
+	"developer": "RaZooM",
+	"description": "klsgnjbdks"
+}

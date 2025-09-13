@@ -3,9 +3,7 @@
 using namespace geode::prelude;
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
-#include <Geode/modify/LevelEditorLayer.hpp>
-
-
+#include <Geode/modify/EditorUI.hpp>
 
 
 class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
@@ -23,33 +21,51 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		CCDrawNode* m_drawWinRectNode;
 	};
 
-	void setupLayers() {
-		GJBaseGameLayer::setupLayers();
-		auto dn = CCDrawNode::create();
-		dn->setID("draw-win-rect-node"_spr);
-		m_objectLayer->addChild(dn, 3000);
-		m_fields->m_drawWinRectNode = dn;
+
+	void setupModDebugDrawNode() {
+		m_fields->m_drawWinRectNode = CCDrawNode::create();
+		m_fields->m_drawWinRectNode->setID("debug-draw-node"_spr);
+		m_debugDrawNode->getParent()->addChild(m_fields->m_drawWinRectNode, 3000);
 	}
 
+
 	void visit() {
-		// I have NO clue why, but RobTop handles Camera rotation in visit()
 		auto f = m_fields.self();
-		if (f->m_enabled && f->m_staticRotEnabled) {
-			float tmp = m_gameState.m_cameraAngle;
-			m_gameState.m_cameraAngle = 0;
-			GJBaseGameLayer::visit();
-			m_gameState.m_cameraAngle = tmp;
+		if (f->m_enabled) {
+			bool ground = m_groundLayer->isVisible();
+			bool ground2 = m_groundLayer2->isVisible();
+			m_groundLayer->setVisible(false);
+			m_groundLayer2->setVisible(false);
+			// I have NO clue why, but RobTop handles Camera rotation in visit()
+			if (f->m_staticRotEnabled) {
+				float angle = m_gameState.m_cameraAngle;
+				m_gameState.m_cameraAngle = 0;
+				GJBaseGameLayer::visit();
+				m_gameState.m_cameraAngle = angle;
+			} else {
+				GJBaseGameLayer::visit();
+			}
+			m_groundLayer->setVisible(ground);
+			m_groundLayer2->setVisible(ground2);
 		} else {
 			GJBaseGameLayer::visit();
 		}
 	}
 
-	void update(float p0) {
-		GJBaseGameLayer::update(p0);
-		
+
+	inline void setScalePos(CCPoint pos, float scale) {
+		auto debugDrawLayer = m_debugDrawNode->getParent();
+		debugDrawLayer->setScale(scale);
+		debugDrawLayer->setPosition(pos);
+		m_objectLayer->setScale(scale);
+		m_objectLayer->setPosition(pos);
+	}
+
+
+	void playtestCameraUpdate() {
 		auto f = m_fields.self();
 		if (!f->m_enabled) return;
-
+		
 		auto winSz = CCDirector::get()->getWinSize();
 		auto scaledSz = winSz / m_gameState.m_cameraZoom;
 		auto camCenter = m_gameState.m_cameraPosition + scaledSz / 2;
@@ -74,69 +90,101 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		}
 		
 		if (f->m_staticZoomEnabled && f->m_staticCameraEnabled) {
-			m_objectLayer->setScale(f->m_staticZoom);
 			auto newCamPos = f->m_staticCenterPos * f->m_staticZoom - winSz / 2;
-			m_objectLayer->setPosition(-newCamPos);
-
+			setScalePos(-newCamPos, f->m_staticZoom);
+		
 		} else if (f->m_staticZoomEnabled) {
-			m_objectLayer->setScale(f->m_staticZoom);
 			auto newCamPos = camCenter * f->m_staticZoom - winSz / 2;
-			m_objectLayer->setPosition(-newCamPos);
-
+			setScalePos(-newCamPos, f->m_staticZoom);
+		
 		} else if (f->m_staticCameraEnabled) {
 			auto newCamPos = f->m_staticCenterPos * m_gameState.m_cameraZoom - winSz / 2;
-			m_objectLayer->setPosition(-newCamPos);
+			setScalePos(-newCamPos, m_gameState.m_cameraZoom);
 		}
-
-		
 	}
 
 
-
-	
-	
-	void updateDebugDraw() {
-		
-		GJBaseGameLayer::updateDebugDraw();
+	void update(float p0) {
+		GJBaseGameLayer::update(p0);
+		playtestCameraUpdate();
 	}
 
+
+	void restoreStaticCameraPos() {
+		auto f = m_fields.self();
+		if (!f->m_enabled || !f->m_staticCameraEnabled) return;
+
+		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
+		auto newCamPos = f->m_staticCenterPos * zoom - CCDirector::get()->getWinSize() / 2;
+		setScalePos(-newCamPos, zoom);
+	}
+
+
+	void updateCameraBGArt(CCPoint p0, float p1) {
+		auto f = m_fields.self();
+		if (f->m_enabled) {
+			CCPoint oldPos = m_background->getPosition();
+			float oldZoom = m_background->getScale();
+			GJBaseGameLayer::updateCameraBGArt(p0, p1);
+			if (f->m_staticCameraEnabled) {
+				m_background->setPosition(oldPos);
+			}
+			if (f->m_staticZoomEnabled) {
+				m_background->setScale(oldZoom);
+			}
+		} else {
+			GJBaseGameLayer::updateCameraBGArt(p0, p1);
+		}
+	}
 };
 
 
-class $modify(LevelEditorLayer) {
-	void onPlaytest() {
-		auto zoom = m_objectLayer->getScale();
-		auto camCenter = (CCDirector::get()->getWinSize() / 2 - m_objectLayer->getPosition()) / zoom;
+class $modify(EditorUI) {
 
-		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
+	bool init(LevelEditorLayer* editorLayer) {
+		if (!EditorUI::init(editorLayer)) return false;
+		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->setupModDebugDrawNode();
+		return true;
+	}
 
+	void updatePlaytestValues() {
+		auto zoom = m_editorLayer->m_objectLayer->getScale();
+		auto camCenter = (CCDirector::get()->getWinSize() / 2 - m_editorLayer->m_objectLayer->getPosition()) / zoom;
+		
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+		
 		f->m_enabled = Mod::get()->getSavedValue<bool>("enabled", true);
 		f->m_staticCameraEnabled = Mod::get()->getSavedValue<bool>("static_pos", true);
 		f->m_staticZoomEnabled = Mod::get()->getSavedValue<bool>("static_zoom", true);
 		f->m_staticRotEnabled = Mod::get()->getSavedValue<bool>("static_rot", true);
 		f->m_debugDrawEnabled = Mod::get()->getSavedValue<bool>("window_rect", true);
-
+		
 		f->m_staticCenterPos = camCenter;
 		f->m_staticZoom = zoom;
-
-		log::info("Cam cent: {}", camCenter);
-
-		LevelEditorLayer::onPlaytest();
+	}
+	
+	void destroyPlaytestValues() {
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+		f->m_enabled = false;
+		if (f->m_drawWinRectNode) f->m_drawWinRectNode->clear();
 	}
 
-	// void updateVisibility(float p0) {
-	// 	if (m_playbackMode == PlaybackMode::Playing) {
-	// 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
-	// 		if (f->m_enabled) {
-	// 			float oldZoom = m_gameState.m_cameraZoom;
-	// 			if (f->m_staticZoomEnabled) m_gameState.m_cameraZoom = f->m_staticZoom;
-	// 			LevelEditorLayer::updateVisibility(p0);
-	// 			m_gameState.m_cameraZoom = oldZoom;
-	// 		} else {
-	// 			LevelEditorLayer::updateVisibility(p0);
-	// 		}
-	// 	} else {
-	// 		LevelEditorLayer::updateVisibility(p0);
-	// 	}
-	// }
+	void onPlaytest(CCObject* sender) {
+		updatePlaytestValues();
+		EditorUI::onPlaytest(sender);
+		if (m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
+			destroyPlaytestValues();
+		}
+	}
+
+	void playtestStopped() {
+		EditorUI::playtestStopped();
+		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->restoreStaticCameraPos();
+		destroyPlaytestValues();
+	}
 };
+
+// todo: 
+// 1. fix bg jump
+// 2. fix mg pos
+// 3. fix obj visibility

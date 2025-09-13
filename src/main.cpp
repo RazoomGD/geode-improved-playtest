@@ -3,6 +3,7 @@
 using namespace geode::prelude;
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
+#include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/EditorUI.hpp>
 
 
@@ -15,7 +16,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		bool m_staticRotEnabled{};
 		bool m_debugDrawEnabled{};
 
-		CCPoint m_staticCenterPos{};
+		CCPoint m_staticCenterPos{}; // in Editor coords
 		float m_staticZoom{};
 
 		CCDrawNode* m_drawWinRectNode;
@@ -80,27 +81,19 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			CCPoint points[] = {{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}};
 		
 			for (int i = 0; i < 4; ++i) {
-				double xr = points[i].x * cosA - points[i].y * sinA;
-				double yr = points[i].x * sinA + points[i].y * cosA;
+				float xr = points[i].x * cosA - points[i].y * sinA;
+				float yr = points[i].x * sinA + points[i].y * cosA;
 				points[i] = camCenter + ccp(xr, yr);
 			}
 		
 			f->m_drawWinRectNode->clear();
-			f->m_drawWinRectNode->drawPolygon(points, 4, ccc4f(0,0,0,0), 1, ccc4f(1,0,1,1));
+			f->m_drawWinRectNode->drawPolygon(points, 4, ccc4f(0,0,0,0), 1, ccc4f(1,1,0,1));
 		}
-		
-		if (f->m_staticZoomEnabled && f->m_staticCameraEnabled) {
-			auto newCamPos = f->m_staticCenterPos * f->m_staticZoom - winSz / 2;
-			setScalePos(-newCamPos, f->m_staticZoom);
-		
-		} else if (f->m_staticZoomEnabled) {
-			auto newCamPos = camCenter * f->m_staticZoom - winSz / 2;
-			setScalePos(-newCamPos, f->m_staticZoom);
-		
-		} else if (f->m_staticCameraEnabled) {
-			auto newCamPos = f->m_staticCenterPos * m_gameState.m_cameraZoom - winSz / 2;
-			setScalePos(-newCamPos, m_gameState.m_cameraZoom);
-		}
+
+		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
+		auto center = f->m_staticCameraEnabled ? f->m_staticCenterPos : camCenter;
+		auto newCamPos = center * zoom - winSz / 2;
+		setScalePos(-newCamPos, zoom);
 	}
 
 
@@ -134,6 +127,35 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			}
 		} else {
 			GJBaseGameLayer::updateCameraBGArt(p0, p1);
+		}
+	}
+};
+
+
+class $modify(LevelEditorLayer) {
+	void updateVisibility(float p0) {
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
+		if (f->m_enabled) {
+			// m_unkPoint33 - bottom left camera corner in editor coords
+			auto oldZoom = m_gameState.m_cameraZoom;
+			auto oldAngle = m_gameState.m_cameraAngle;
+			auto oldUnk33 = m_gameState.m_unkPoint33;
+
+			if (f->m_staticZoomEnabled) m_gameState.m_cameraZoom = f->m_staticZoom;
+			if (f->m_staticRotEnabled) m_gameState.m_cameraAngle = 0;
+			if (f->m_staticCameraEnabled) {
+				auto winCenterInEditorScale = CCDirector::get()->getWinSize() / 2 / m_gameState.m_cameraZoom;
+				m_gameState.m_unkPoint33 = f->m_staticCenterPos - winCenterInEditorScale;
+			}
+
+			LevelEditorLayer::updateVisibility(p0);
+
+			m_gameState.m_cameraZoom = oldZoom;
+			m_gameState.m_cameraAngle = oldAngle;
+			m_gameState.m_unkPoint33 = oldUnk33;
+
+		} else {
+			LevelEditorLayer::updateVisibility(p0);
 		}
 	}
 };
@@ -187,4 +209,3 @@ class $modify(EditorUI) {
 // todo: 
 // 1. fix bg jump
 // 2. fix mg pos
-// 3. fix obj visibility

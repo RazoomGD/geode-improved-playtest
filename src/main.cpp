@@ -19,6 +19,9 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		CCPoint m_staticCenterPos{}; // in Editor coords
 		float m_staticZoom{};
 
+		CCPoint m_lastPos{};
+		float m_lastScale{1.f};
+
 		Ref<CCDrawNode> m_drawWinRectNode;
 	};
 
@@ -52,13 +55,14 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			m_groundLayer->setVisible(ground);
 			m_groundLayer2->setVisible(ground2);
 			if (m_middleground) m_middleground->setVisible(mg);
+
 		} else {
 			GJBaseGameLayer::visit();
 		}
 	}
 
 
-	inline void setScalePos(CCPoint pos, float scale) {
+	inline void setScalePosAllLayers(CCPoint pos, float scale) {
 		auto debugDrawLayer = m_debugDrawNode->getParent();
 		debugDrawLayer->setScale(scale);
 		debugDrawLayer->setPosition(pos);
@@ -104,7 +108,10 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
 		auto center = f->m_staticCameraEnabled ? f->m_staticCenterPos : camCenter;
 		auto newCamPos = center * zoom - winSz / 2;
-		setScalePos(-newCamPos, zoom);
+		setScalePosAllLayers(-newCamPos, zoom);
+
+		f->m_lastPos = -newCamPos;
+		f->m_lastScale = zoom;
 	}
 
 
@@ -121,7 +128,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
 		auto newCamPos = f->m_staticCenterPos * zoom - CCDirector::get()->getWinSize() / 2;
-		setScalePos(-newCamPos, zoom);
+		setScalePosAllLayers(-newCamPos, zoom);
 	}
 
 
@@ -142,10 +149,35 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			GJBaseGameLayer::updateCameraBGArt(p0, p1);
 		}
 	}
+
+
+	void updateDebugDraw() {
+		auto f = m_fields.self();
+		if (f->m_enabled) {
+			CCPoint oldPos = m_objectLayer->getPosition();
+			float oldZoom = m_objectLayer->getScale();
+			m_objectLayer->setPosition(f->m_lastPos);
+			m_objectLayer->setScale(f->m_lastScale);
+			GJBaseGameLayer::updateDebugDraw();
+			m_objectLayer->setPosition(oldPos);
+			m_objectLayer->setScale(oldZoom);
+		} else {
+			GJBaseGameLayer::updateDebugDraw();
+		}
+	}
 };
 
 
 class $modify(LevelEditorLayer) {
+
+	$override
+	bool init(GJGameLevel* p0, bool p1) {
+		if (!LevelEditorLayer::init(p0, p1)) return false;
+		reinterpret_cast<MyGJBaseGameLayer*>(this)->setupModDebugDrawNode();
+		return true;
+	}
+
+
 	$override
 	void updateVisibility(float p0) {
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
@@ -180,27 +212,11 @@ class $modify(LevelEditorLayer) {
 		}
 	}
 
-	// void updateDebugDraw() {
-	// 	LevelEditorLayer::updateDebugDraw();
-	// }
-};
-
-
-class $modify(EditorUI) {
-
-	$override
-	bool init(LevelEditorLayer* editorLayer) {
-		if (!EditorUI::init(editorLayer)) return false;
-		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->setupModDebugDrawNode();
-		return true;
-	}
-
-
 	void updatePlaytestValues() {
-		auto zoom = m_editorLayer->m_objectLayer->getScale();
-		auto camCenter = (CCDirector::get()->getWinSize() / 2 - m_editorLayer->m_objectLayer->getPosition()) / zoom;
+		auto zoom = this->m_objectLayer->getScale();
+		auto camCenter = (CCDirector::get()->getWinSize() / 2 - this->m_objectLayer->getPosition()) / zoom;
 		
-		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		
 		f->m_enabled = Mod::get()->getSavedValue<bool>("enabled", true);
 		f->m_staticCameraEnabled = Mod::get()->getSavedValue<bool>("static_pos", true);
@@ -212,29 +228,36 @@ class $modify(EditorUI) {
 		f->m_staticZoom = zoom;
 	}
 	
-
+	
 	void destroyPlaytestValues() {
-		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		f->m_enabled = false;
 		if (f->m_drawWinRectNode) f->m_drawWinRectNode->clear();
 	}
 
 
 	$override
-	void onPlaytest(CCObject* sender) {
-		updatePlaytestValues();
-		EditorUI::onPlaytest(sender);
-		if (m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
-			destroyPlaytestValues();
+	void onStopPlaytest() {
+		auto mode = m_playbackMode;
+		LevelEditorLayer::onStopPlaytest();
+		if (mode == PlaybackMode::Playing) {
+			reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCameraPos();
 		}
+		destroyPlaytestValues();
 	}
 
 
 	$override
-	void playtestStopped() {
-		EditorUI::playtestStopped();
-		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->restoreStaticCameraPos();
-		destroyPlaytestValues();
+	void onPlaytest() {
+		updatePlaytestValues();
+		LevelEditorLayer::onPlaytest();
+	}
+
+
+	$override
+	void onResumePlaytest() {
+		updatePlaytestValues();
+		LevelEditorLayer::onResumePlaytest();
 	}
 };
 

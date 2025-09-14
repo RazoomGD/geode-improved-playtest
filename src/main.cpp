@@ -19,24 +19,27 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		CCPoint m_staticCenterPos{}; // in Editor coords
 		float m_staticZoom{};
 
-		CCDrawNode* m_drawWinRectNode;
+		Ref<CCDrawNode> m_drawWinRectNode;
 	};
 
 
 	void setupModDebugDrawNode() {
 		m_fields->m_drawWinRectNode = CCDrawNode::create();
 		m_fields->m_drawWinRectNode->setID("debug-draw-node"_spr);
-		m_debugDrawNode->getParent()->addChild(m_fields->m_drawWinRectNode, 3000);
+		m_debugDrawNode->addChild(m_fields->m_drawWinRectNode, 3000);
 	}
 
 
+	$override
 	void visit() {
 		auto f = m_fields.self();
 		if (f->m_enabled) {
 			bool ground = m_groundLayer->isVisible();
 			bool ground2 = m_groundLayer2->isVisible();
+			bool mg = m_middleground ? m_middleground->isVisible() : false;
 			m_groundLayer->setVisible(false);
 			m_groundLayer2->setVisible(false);
+			if (m_middleground) m_middleground->setVisible(false);
 			// I have NO clue why, but RobTop handles Camera rotation in visit()
 			if (f->m_staticRotEnabled) {
 				float angle = m_gameState.m_cameraAngle;
@@ -48,6 +51,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			}
 			m_groundLayer->setVisible(ground);
 			m_groundLayer2->setVisible(ground2);
+			if (m_middleground) m_middleground->setVisible(mg);
 		} else {
 			GJBaseGameLayer::visit();
 		}
@@ -58,8 +62,15 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto debugDrawLayer = m_debugDrawNode->getParent();
 		debugDrawLayer->setScale(scale);
 		debugDrawLayer->setPosition(pos);
+
 		m_objectLayer->setScale(scale);
 		m_objectLayer->setPosition(pos);
+
+		m_inShaderObjectLayer->setPosition(pos);
+		m_inShaderObjectLayer->setScale(scale);
+
+		m_aboveShaderObjectLayer->setPosition(pos);
+		m_aboveShaderObjectLayer->setScale(scale);
 	}
 
 
@@ -70,7 +81,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto winSz = CCDirector::get()->getWinSize();
 		auto scaledSz = winSz / m_gameState.m_cameraZoom;
 		auto camCenter = m_gameState.m_cameraPosition + scaledSz / 2;
-		
+				
 		if (f->m_debugDrawEnabled) {
 			float angleRad = m_gameState.m_cameraAngle / 180.f * M_PI;
 			float cosA = std::cos(angleRad);
@@ -87,7 +98,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			}
 		
 			f->m_drawWinRectNode->clear();
-			f->m_drawWinRectNode->drawPolygon(points, 4, ccc4f(0,0,0,0), 1, ccc4f(1,1,0,1));
+			f->m_drawWinRectNode->drawPolygon(points, 4, ccc4f(0,0,0,0), 1.5, ccc4f(1,1,0,1));
 		}
 
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
@@ -97,6 +108,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 	}
 
 
+	$override
 	void update(float p0) {
 		GJBaseGameLayer::update(p0);
 		playtestCameraUpdate();
@@ -113,6 +125,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 	}
 
 
+	$override
 	void updateCameraBGArt(CCPoint p0, float p1) {
 		auto f = m_fields.self();
 		if (f->m_enabled) {
@@ -133,6 +146,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 
 
 class $modify(LevelEditorLayer) {
+	$override
 	void updateVisibility(float p0) {
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		if (f->m_enabled) {
@@ -141,11 +155,18 @@ class $modify(LevelEditorLayer) {
 			auto oldAngle = m_gameState.m_cameraAngle;
 			auto oldUnk33 = m_gameState.m_unkPoint33;
 
+			// todo: test with zoom triggers
+
 			if (f->m_staticZoomEnabled) m_gameState.m_cameraZoom = f->m_staticZoom;
 			if (f->m_staticRotEnabled) m_gameState.m_cameraAngle = 0;
+
 			if (f->m_staticCameraEnabled) {
 				auto winCenterInEditorScale = CCDirector::get()->getWinSize() / 2 / m_gameState.m_cameraZoom;
 				m_gameState.m_unkPoint33 = f->m_staticCenterPos - winCenterInEditorScale;
+			} else {
+				auto hws = CCDirector::get()->getWinSize() / 2;
+				auto diffInEditorCoords = hws * (1 / oldZoom - 1 / m_gameState.m_cameraZoom);
+				m_gameState.m_unkPoint33 = m_gameState.m_unkPoint33 + diffInEditorCoords;
 			}
 
 			LevelEditorLayer::updateVisibility(p0);
@@ -158,16 +179,22 @@ class $modify(LevelEditorLayer) {
 			LevelEditorLayer::updateVisibility(p0);
 		}
 	}
+
+	// void updateDebugDraw() {
+	// 	LevelEditorLayer::updateDebugDraw();
+	// }
 };
 
 
 class $modify(EditorUI) {
 
+	$override
 	bool init(LevelEditorLayer* editorLayer) {
 		if (!EditorUI::init(editorLayer)) return false;
 		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->setupModDebugDrawNode();
 		return true;
 	}
+
 
 	void updatePlaytestValues() {
 		auto zoom = m_editorLayer->m_objectLayer->getScale();
@@ -185,12 +212,15 @@ class $modify(EditorUI) {
 		f->m_staticZoom = zoom;
 	}
 	
+
 	void destroyPlaytestValues() {
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
 		f->m_enabled = false;
 		if (f->m_drawWinRectNode) f->m_drawWinRectNode->clear();
 	}
 
+
+	$override
 	void onPlaytest(CCObject* sender) {
 		updatePlaytestValues();
 		EditorUI::onPlaytest(sender);
@@ -199,6 +229,8 @@ class $modify(EditorUI) {
 		}
 	}
 
+
+	$override
 	void playtestStopped() {
 		EditorUI::playtestStopped();
 		reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->restoreStaticCameraPos();
@@ -206,6 +238,3 @@ class $modify(EditorUI) {
 	}
 };
 
-// todo: 
-// 1. fix bg jump
-// 2. fix mg pos

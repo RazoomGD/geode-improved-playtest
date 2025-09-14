@@ -170,8 +170,8 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
         );
         myMenu->addChild(btn);
         btn->setPosition({124, 10});
-        btn->setScale(0.7);
-        btn->m_baseScale = 0.7;
+        btn->setScale(0.8);
+        btn->m_baseScale = 0.8;
         
         myMenu->setContentSize({120, 20});
         menu->addChild(myMenu, -1);

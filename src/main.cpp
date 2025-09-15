@@ -5,6 +5,32 @@ using namespace geode::prelude;
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/EditorUI.hpp>
+#include <Geode/modify/CCEGLView.hpp>
+
+#include <numbers>
+
+/*
+! Notes:
+scenePoint = edPos + edPoint * edScale
+edPoint = (scenePoint - edPos) / edScale
+edPos = scenePoint - edPoint * edScale     <-- position of m_objectLayer
+
+m_gameState.m_cameraPosition == -edPos
+m_gameState.m_cameraPosition2 - bottom left camera corner in editor coords
+
+*/
+
+inline CCPoint scenePoint(CCPoint edPoint, CCPoint edPos, float edScale) {
+	return edPos + edPoint * edScale;
+}
+
+inline CCPoint editorPoint(CCPoint scenePoint, CCPoint edPos, float edScale) {
+	return (scenePoint - edPos) / edScale;
+}
+
+inline CCPoint edPos(CCPoint edPoint, CCPoint scenePoint, float edScale) {
+	return scenePoint - edPoint * edScale;
+}
 
 
 class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
@@ -40,9 +66,11 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			bool ground = m_groundLayer->isVisible();
 			bool ground2 = m_groundLayer2->isVisible();
 			bool mg = m_middleground ? m_middleground->isVisible() : false;
+
 			m_groundLayer->setVisible(false);
 			m_groundLayer2->setVisible(false);
 			if (m_middleground) m_middleground->setVisible(false);
+
 			// I have NO clue why, but RobTop handles Camera rotation in visit()
 			if (f->m_staticRotEnabled) {
 				float angle = m_gameState.m_cameraAngle;
@@ -52,6 +80,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			} else {
 				GJBaseGameLayer::visit();
 			}
+
 			m_groundLayer->setVisible(ground);
 			m_groundLayer2->setVisible(ground2);
 			if (m_middleground) m_middleground->setVisible(mg);
@@ -82,23 +111,23 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto f = m_fields.self();
 		if (!f->m_enabled) return;
 		
-		auto winSz = CCDirector::get()->getWinSize();
-		auto scaledSz = winSz / m_gameState.m_cameraZoom;
-		auto camCenter = m_gameState.m_cameraPosition + scaledSz / 2;
+		auto hws = CCDirector::get()->getWinSize() / 2;
+		auto camCenterInEditor = editorPoint(hws, -m_gameState.m_cameraPosition, m_gameState.m_cameraZoom);
 				
 		if (f->m_debugDrawEnabled) {
-			float angleRad = m_gameState.m_cameraAngle / 180.f * M_PI;
+			float angleRad = m_gameState.m_cameraAngle / 180.f * std::numbers::pi;
 			float cosA = std::cos(angleRad);
 			float sinA = std::sin(angleRad);
 		
-			float hw = scaledSz.width / 2.f;
-			float hh = scaledSz.height / 2.f;
+			auto scaledSz = hws / m_gameState.m_cameraZoom;
+			float hw = scaledSz.width;
+			float hh = scaledSz.height;
 			CCPoint points[] = {{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}};
 		
 			for (int i = 0; i < 4; ++i) {
 				float xr = points[i].x * cosA - points[i].y * sinA;
 				float yr = points[i].x * sinA + points[i].y * cosA;
-				points[i] = camCenter + ccp(xr, yr);
+				points[i] = camCenterInEditor + ccp(xr, yr);
 			}
 		
 			f->m_drawWinRectNode->clear();
@@ -106,11 +135,12 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		}
 
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
-		auto center = f->m_staticCameraEnabled ? f->m_staticCenterPos : camCenter;
-		auto newCamPos = center * zoom - winSz / 2;
-		setScalePosAllLayers(-newCamPos, zoom);
+		auto center = f->m_staticCameraEnabled ? f->m_staticCenterPos : camCenterInEditor;
 
-		f->m_lastPos = -newCamPos;
+		auto newCamPos = edPos(center, hws, zoom);
+		setScalePosAllLayers(newCamPos, zoom);
+
+		f->m_lastPos = newCamPos;
 		f->m_lastScale = zoom;
 	}
 
@@ -126,9 +156,11 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto f = m_fields.self();
 		if (!f->m_enabled || !f->m_staticCameraEnabled) return;
 
+		auto hws = CCDirector::get()->getWinSize() / 2;
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
-		auto newCamPos = f->m_staticCenterPos * zoom - CCDirector::get()->getWinSize() / 2;
-		setScalePosAllLayers(-newCamPos, zoom);
+
+		auto newCamPos = edPos(f->m_staticCenterPos, hws, zoom);
+		setScalePosAllLayers(newCamPos, zoom);
 	}
 
 
@@ -182,30 +214,29 @@ class $modify(LevelEditorLayer) {
 	void updateVisibility(float p0) {
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		if (f->m_enabled) {
-			// m_unkPoint33 - bottom left camera corner in editor coords
+
 			auto oldZoom = m_gameState.m_cameraZoom;
 			auto oldAngle = m_gameState.m_cameraAngle;
-			auto oldUnk33 = m_gameState.m_unkPoint33;
-
-			// todo: test with zoom triggers
+			auto oldPos2 = m_gameState.m_cameraPosition2;
 
 			if (f->m_staticZoomEnabled) m_gameState.m_cameraZoom = f->m_staticZoom;
 			if (f->m_staticRotEnabled) m_gameState.m_cameraAngle = 0;
 
+			auto hws = CCDirector::get()->getWinSize() / 2;
+
 			if (f->m_staticCameraEnabled) {
-				auto winCenterInEditorScale = CCDirector::get()->getWinSize() / 2 / m_gameState.m_cameraZoom;
-				m_gameState.m_unkPoint33 = f->m_staticCenterPos - winCenterInEditorScale;
+				auto winCenterInEditorScale = hws / m_gameState.m_cameraZoom;
+				m_gameState.m_cameraPosition2 = f->m_staticCenterPos - winCenterInEditorScale;
 			} else {
-				auto hws = CCDirector::get()->getWinSize() / 2;
 				auto diffInEditorCoords = hws * (1 / oldZoom - 1 / m_gameState.m_cameraZoom);
-				m_gameState.m_unkPoint33 = m_gameState.m_unkPoint33 + diffInEditorCoords;
+				m_gameState.m_cameraPosition2 = m_gameState.m_cameraPosition2 + diffInEditorCoords;
 			}
 
 			LevelEditorLayer::updateVisibility(p0);
 
 			m_gameState.m_cameraZoom = oldZoom;
 			m_gameState.m_cameraAngle = oldAngle;
-			m_gameState.m_unkPoint33 = oldUnk33;
+			m_gameState.m_cameraPosition2 = oldPos2;
 
 		} else {
 			LevelEditorLayer::updateVisibility(p0);
@@ -213,8 +244,9 @@ class $modify(LevelEditorLayer) {
 	}
 
 	void updatePlaytestValues() {
-		auto zoom = this->m_objectLayer->getScale();
-		auto camCenter = (CCDirector::get()->getWinSize() / 2 - this->m_objectLayer->getPosition()) / zoom;
+		auto zoom = m_objectLayer->getScale();
+		auto hws = CCDirector::get()->getWinSize() / 2;
+		auto camCenter = editorPoint(hws, m_objectLayer->getPosition(), zoom);
 		
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		
@@ -240,10 +272,12 @@ class $modify(LevelEditorLayer) {
 	void onStopPlaytest() {
 		auto mode = m_playbackMode;
 		LevelEditorLayer::onStopPlaytest();
-		if (mode == PlaybackMode::Playing) {
-			reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCameraPos();
+		if (mode != PlaybackMode::Not) {
+			queueInMainThread([this] {
+				reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCameraPos();
+				destroyPlaytestValues();
+			});
 		}
-		destroyPlaytestValues();
 	}
 
 
@@ -261,3 +295,109 @@ class $modify(LevelEditorLayer) {
 	}
 };
 
+
+#ifdef GEODE_IS_DESKTOP
+
+class $modify(MyEditorUI, EditorUI) {
+
+	static void onModify(auto& self) {
+		if (!self.setHookPriority("EditorUI::scrollWheel", Priority::VeryEarly)) {
+			log::warn("Failed to set hook priority");
+		}
+	}
+
+
+	$override
+	void scrollWheel(float y, float x) { 
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+
+		if (!f->m_enabled || m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
+			EditorUI::scrollWheel(y, x);
+			return;
+		}
+		
+		// Scroll during playtest (used BetterEdit code to be consistent)
+		bool isZoom = CCKeyboardDispatcher::get()->getControlKeyPressed();
+		auto objLayer = m_editorLayer->m_objectLayer;
+
+		if (isZoom && f->m_staticZoomEnabled) {
+			float zoom = std::pow(std::numbers::e, std::log(std::max(f->m_staticZoom, .001f)) - y * .01f);
+			zoom = std::clamp(zoom, .1f, 10000000.f);
+
+			if (f->m_staticCameraEnabled) {
+				auto mousePoint = getMousePos();
+				auto hws = CCDirector::get()->getWinSize() / 2;
+
+				auto objLayerPos = edPos(f->m_staticCenterPos, hws, f->m_staticZoom);
+				auto mousePointInEditor = editorPoint(mousePoint, objLayerPos, f->m_staticZoom);
+
+				auto newObjLayerPos = edPos(mousePointInEditor, mousePoint, zoom);
+				f->m_staticCenterPos = editorPoint(hws, newObjLayerPos, zoom);
+			}
+
+			f->m_staticZoom = zoom;
+
+		} else { // otherwise move screen
+			float diff = y * 2;
+
+			if (f->m_staticCameraEnabled) {
+				if (CCKeyboardDispatcher::get()->getShiftKeyPressed()) {
+					f->m_staticCenterPos.x -= diff;
+				} else {
+					#ifdef GEODE_IS_MACOS
+						f->m_staticCenterPos.x += diff;
+					#else
+						f->m_staticCenterPos.y += diff;
+					#endif
+				}
+			}
+		}
+	}
+
+
+	void onMiddleClickPanning(CCPoint diff) {
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
+		if (!f->m_enabled || m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
+			return;
+		}
+		if (f->m_staticCameraEnabled) {
+			float zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_editorLayer->m_gameState.m_cameraZoom;
+			f->m_staticCenterPos += diff / zoom;
+		}
+	}
+};
+
+
+// Middle click panning (used NinKaz's code)
+bool isPanning{};
+CCPoint lastClick{};
+
+class $modify(CCEGLView) {
+    $override 
+	void onGLFWMouseCallBack(GLFWwindow* window, int button, int action, int mods) {
+		CCEGLView::onGLFWMouseCallBack(window, button, action, mods);
+		if (button != GLFW_MOUSE_BUTTON_MIDDLE) return;
+
+		if (action == GLFW_PRESS) {
+			isPanning = true;
+			lastClick = getMousePos();
+		} else {
+			isPanning = false;
+		}
+	}
+
+
+    $override 
+	void onGLFWMouseMoveCallBack(GLFWwindow* window, double x, double y) {
+		CCEGLView::onGLFWMouseMoveCallBack(window, x, y);
+		if (!isPanning) return;
+		if (auto editor = EditorUI::get()) {
+			auto pos = getMousePos();
+			reinterpret_cast<MyEditorUI*>(editor)->onMiddleClickPanning(lastClick - pos);
+			lastClick = pos;
+		}
+	}
+};
+
+
+#endif

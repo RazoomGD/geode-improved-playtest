@@ -1,2 +1,7 @@
 # 1.0.0
-- Edit this file to change your mod's changelog.
+- Static position
+  - Panning during playtest with mouse `middle click`
+- Static zoom
+  - Zooming during playtest with `ctrl + scroll wheel`
+- Static rotation
+- Show camera edges

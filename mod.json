@@ -6,9 +6,23 @@
 		"mac": "2.2074",
 		"ios": "2.2074"
 	},
-	"id": "razoom.playtest_camera_settings",
-	"name": "Playtest Camera Settings",
+	"id": "razoom.improved_playtest",
+	"name": "Improved Playtest",
 	"version": "v1.0.0",
 	"developer": "RaZooM",
-	"description": "klsgnjbdks"
+	"description": "Adds useful options to the playtest",
+
+	"links": {
+		"source": "https://github.com/RazoomGD/geode-improved-playtest",
+		"community": "https://discord.gg/wcWvtKHP8n"
+	},
+
+	"dependencies": {
+		"ninkaz.middle-click-panning": {
+			"version": ">=1.0.0",
+			"importance": "recommended"
+		}
+	},
+
+	"tags": ["customization", "editor", "utility", "enhancement"]
 }

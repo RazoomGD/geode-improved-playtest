@@ -158,7 +158,7 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
         toggler->toggle(Mod::get()->getSavedValue<bool>("enabled", true));
         m_fields->m_toggler = toggler;        
 
-        auto lab = CCLabelBMFont::create("Static Camera", "bigFont.fnt");
+        auto lab = CCLabelBMFont::create("Improved Playtest", "bigFont.fnt");
         lab->setAnchorPoint({0,0.5});
         lab->limitLabelWidth(90, 1, 0);
         myMenu->addChild(lab);

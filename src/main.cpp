@@ -149,42 +149,37 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 
 	$override
 	void update(float p0) {
-		GJBaseGameLayer::update(p0);
-		playtestCameraUpdate();
-	}
-
-
-	void restoreStaticCameraPos() {
-		auto f = m_fields.self();
-		if (!f->m_enabled || !f->m_staticCameraEnabled) return;
-
-		auto hws = CCDirector::get()->getWinSize() / 2;
-		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
-
-		auto newEdPos = edPos(f->m_staticCenterPos, hws, zoom);
-		setScalePosAllLayers(newEdPos, zoom);
-	}
-
-
-	$override
-	void updateCameraBGArt(CCPoint p0, float p1) {
 		auto f = m_fields.self();
 		if (f->m_enabled) {
-			CCPoint oldPos = m_background->getPosition();
-			float oldZoom = m_background->getScale();
-			GJBaseGameLayer::updateCameraBGArt(p0, p1);
-			if (f->m_staticCameraEnabled) {
-				m_background->setPosition(oldPos);
-			}
-			if (f->m_staticZoomEnabled) {
-				m_background->setScale(oldZoom);
-			}
+			CCPoint oldBgPos = m_background->getPosition();
+			float oldBgZoom = m_background->getScale();
+			GJBaseGameLayer::update(p0);
+			playtestCameraUpdate();
+			if (f->m_staticCameraEnabled) m_background->setPosition(oldBgPos);
+			if (f->m_staticZoomEnabled) m_background->setScale(oldBgZoom);
 		} else {
-			GJBaseGameLayer::updateCameraBGArt(p0, p1);
+			GJBaseGameLayer::update(p0);
 		}
 	}
 
 
+	void restoreStaticCamera() {
+		auto f = m_fields.self();
+		if (!f->m_enabled) return;
+		auto hws = CCDirector::get()->getWinSize() / 2;
+		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
+		auto newEdPos = f->m_staticCameraEnabled ? edPos(f->m_staticCenterPos, hws, zoom) : m_objectLayer->getPosition();
+		setScalePosAllLayers(newEdPos, zoom);
+	}
+
+
+	void restoreStaticCamera(CCPoint p, float zoom) {
+		if (!m_fields->m_enabled) return;
+		setScalePosAllLayers(p, zoom);
+	}
+
+
+	$override
 	void updateDebugDraw() {
 		auto f = m_fields.self();
 		if (f->m_enabled) {
@@ -198,6 +193,12 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		} else {
 			GJBaseGameLayer::updateDebugDraw();
 		}
+	}
+
+	$override
+	void processAreaEffects(gd::vector<EnterEffectInstance>* p0, GJAreaActionType p1, float p2, bool p3) {
+		
+		GJBaseGameLayer::processAreaEffects(p0, p1, p2, p3);
 	}
 };
 
@@ -273,12 +274,22 @@ class $modify(LevelEditorLayer) {
 	$override
 	void onStopPlaytest() {
 		auto mode = m_playbackMode;
+		auto pos = m_objectLayer->getPosition();
+		auto scale = m_objectLayer->getScale();
 		LevelEditorLayer::onStopPlaytest();
-		if (mode != PlaybackMode::Not) {
-			queueInMainThread([this] {
-				reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCameraPos();
+
+		if (mode == PlaybackMode::Paused) {
+			queueInMainThread([this, pos, scale] {
+				reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCamera(pos, scale);
 				destroyPlaytestValues();
 			});
+		} else if (mode == PlaybackMode::Playing) {
+			queueInMainThread([this] {
+				reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCamera();
+				destroyPlaytestValues();
+			});
+		} else {
+			destroyPlaytestValues();
 		}
 	}
 

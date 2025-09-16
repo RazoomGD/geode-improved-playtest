@@ -5,7 +5,10 @@ using namespace geode::prelude;
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/EditorUI.hpp>
-#include <Geode/modify/CCEGLView.hpp>
+
+#ifdef GEODE_IS_WINDOWS
+	#include <Geode/modify/CCEGLView.hpp>
+#endif
 
 #include <numbers>
 
@@ -15,8 +18,7 @@ scenePoint = edPos + edPoint * edScale
 edPoint = (scenePoint - edPos) / edScale
 edPos = scenePoint - edPoint * edScale     <-- position of m_objectLayer
 
-m_gameState.m_cameraPosition == -edPos
-m_gameState.m_cameraPosition2 - bottom left camera corner in editor coords
+m_gameState.m_cameraPosition, m_gameState.m_cameraPosition2 - bottom left camera corner in editor coords
 
 */
 
@@ -112,14 +114,14 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		if (!f->m_enabled) return;
 		
 		auto hws = CCDirector::get()->getWinSize() / 2;
-		auto camCenterInEditor = editorPoint(hws, -m_gameState.m_cameraPosition, m_gameState.m_cameraZoom);
+		auto scaledSz = hws / m_gameState.m_cameraZoom;
+		auto camCenterInEditor = m_gameState.m_cameraPosition + scaledSz;
 				
 		if (f->m_debugDrawEnabled) {
 			float angleRad = m_gameState.m_cameraAngle / 180.f * std::numbers::pi;
 			float cosA = std::cos(angleRad);
 			float sinA = std::sin(angleRad);
 		
-			auto scaledSz = hws / m_gameState.m_cameraZoom;
 			float hw = scaledSz.width;
 			float hh = scaledSz.height;
 			CCPoint points[] = {{-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}};
@@ -137,10 +139,10 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
 		auto center = f->m_staticCameraEnabled ? f->m_staticCenterPos : camCenterInEditor;
 
-		auto newCamPos = edPos(center, hws, zoom);
-		setScalePosAllLayers(newCamPos, zoom);
+		auto newEdPos = edPos(center, hws, zoom);
+		setScalePosAllLayers(newEdPos, zoom);
 
-		f->m_lastPos = newCamPos;
+		f->m_lastPos = newEdPos;
 		f->m_lastScale = zoom;
 	}
 
@@ -159,8 +161,8 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto hws = CCDirector::get()->getWinSize() / 2;
 		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
 
-		auto newCamPos = edPos(f->m_staticCenterPos, hws, zoom);
-		setScalePosAllLayers(newCamPos, zoom);
+		auto newEdPos = edPos(f->m_staticCenterPos, hws, zoom);
+		setScalePosAllLayers(newEdPos, zoom);
 	}
 
 
@@ -316,31 +318,29 @@ class $modify(MyEditorUI, EditorUI) {
 			return;
 		}
 		
-		// Scroll during playtest (used BetterEdit code to be consistent)
-		bool isZoom = CCKeyboardDispatcher::get()->getControlKeyPressed();
-		auto objLayer = m_editorLayer->m_objectLayer;
-
-		if (isZoom && f->m_staticZoomEnabled) {
-			float zoom = std::pow(std::numbers::e, std::log(std::max(f->m_staticZoom, .001f)) - y * .01f);
-			zoom = std::clamp(zoom, .1f, 10000000.f);
-
-			if (f->m_staticCameraEnabled) {
-				auto mousePoint = getMousePos();
-				auto hws = CCDirector::get()->getWinSize() / 2;
-
-				auto objLayerPos = edPos(f->m_staticCenterPos, hws, f->m_staticZoom);
-				auto mousePointInEditor = editorPoint(mousePoint, objLayerPos, f->m_staticZoom);
-
-				auto newObjLayerPos = edPos(mousePointInEditor, mousePoint, zoom);
-				f->m_staticCenterPos = editorPoint(hws, newObjLayerPos, zoom);
+		// Scroll during playtesting (used Better Edit code to be consistent)
+		if (CCKeyboardDispatcher::get()->getControlKeyPressed()) {
+			if (f->m_staticZoomEnabled) {
+				float zoom = std::pow(std::numbers::e, std::log(std::max(f->m_staticZoom, .001f)) - y * .01f);
+				zoom = std::clamp(zoom, .1f, 10000000.f);
+	
+				if (f->m_staticCameraEnabled) {
+					auto mousePoint = getMousePos();
+					auto hws = CCDirector::get()->getWinSize() / 2;
+	
+					auto objLayerPos = edPos(f->m_staticCenterPos, hws, f->m_staticZoom);
+					auto mousePointInEditor = editorPoint(mousePoint, objLayerPos, f->m_staticZoom);
+	
+					auto newObjLayerPos = edPos(mousePointInEditor, mousePoint, zoom);
+					f->m_staticCenterPos = editorPoint(hws, newObjLayerPos, zoom);
+				}
+				f->m_staticZoom = zoom;
 			}
-
-			f->m_staticZoom = zoom;
-
 		} else { // otherwise move screen
-			float diff = y * 2;
-
 			if (f->m_staticCameraEnabled) {
+				auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_editorLayer->m_objectLayer->getScale();
+				float diff = -y * 2 / zoom;
+
 				if (CCKeyboardDispatcher::get()->getShiftKeyPressed()) {
 					f->m_staticCenterPos.x -= diff;
 				} else {
@@ -367,8 +367,8 @@ class $modify(MyEditorUI, EditorUI) {
 	}
 };
 
+#ifdef GEODE_IS_WINDOWS
 
-// Middle click panning (used NinKaz's code)
 bool isPanning{};
 CCPoint lastClick{};
 
@@ -399,5 +399,6 @@ class $modify(CCEGLView) {
 	}
 };
 
+#endif
 
 #endif

@@ -54,7 +54,7 @@ public:
         m_currPos -= 10;
     }
 
-    bool setup(int) {
+    bool setup(int) override {
         m_closeBtn->setVisible(false);
         // setTitle("Playtest Camera Settings");
 

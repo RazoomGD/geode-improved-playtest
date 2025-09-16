@@ -20,9 +20,10 @@
 	"dependencies": {
 		"ninkaz.middle-click-panning": {
 			"version": ">=1.0.0",
-			"importance": "recommended"
+			"importance": "recommended",
+			"platforms": ["win"]
 		}
 	},
 
-	"tags": ["customization", "editor", "utility", "enhancement"]
+	"tags": ["editor", "utility", "enhancement", "customization"]
 }

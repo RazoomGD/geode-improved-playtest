@@ -44,11 +44,19 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		bool m_staticRotEnabled{};
 		bool m_debugDrawEnabled{};
 
-		CCPoint m_staticCenterPos{}; // in Editor coords
+		// desired camera center position and zoom (in Editor coords)
+		CCPoint m_staticCenterPos{};
 		float m_staticZoom{};
 
+		// m_objectLayer position
 		CCPoint m_lastPos{};
 		float m_lastScale{1.f};
+
+		struct {
+			CCPoint m_oldGameStateCameraPos2{};
+			float m_oldGameStateZoom{1.f};
+			float m_oldGameStateCameraAngle{};
+		} m_originalValues;
 
 		Ref<CCDrawNode> m_drawWinRectNode;
 	};
@@ -153,8 +161,11 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		if (f->m_enabled) {
 			CCPoint oldBgPos = m_background->getPosition();
 			float oldBgZoom = m_background->getScale();
+
+			// это нужно вызывать со всеми оригинальными значениями
 			GJBaseGameLayer::update(p0);
 			playtestCameraUpdate();
+			
 			if (f->m_staticCameraEnabled) m_background->setPosition(oldBgPos);
 			if (f->m_staticZoomEnabled) m_background->setScale(oldBgZoom);
 		} else {
@@ -167,14 +178,16 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		auto f = m_fields.self();
 		if (!f->m_enabled) return;
 		auto hws = CCDirector::get()->getWinSize() / 2;
-		auto zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_objectLayer->getScale();
-		auto newEdPos = f->m_staticCameraEnabled ? edPos(f->m_staticCenterPos, hws, zoom) : m_objectLayer->getPosition();
-		setScalePosAllLayers(newEdPos, zoom);
+		auto edPoint = editorPoint(hws, f->m_lastPos, f->m_lastScale);
+		auto nextZoom = f->m_staticZoomEnabled ? f->m_lastScale : m_objectLayer->getScale();
+		auto p = edPos(edPoint, hws, nextZoom);
+		setScalePosAllLayers(p, nextZoom);
 	}
 
 
 	void restoreStaticCamera(CCPoint p, float zoom) {
-		if (!m_fields->m_enabled) return;
+		auto f = m_fields.self();
+		if (!f->m_enabled) return;
 		setScalePosAllLayers(p, zoom);
 	}
 
@@ -187,6 +200,7 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			float oldZoom = m_objectLayer->getScale();
 			m_objectLayer->setPosition(f->m_lastPos);
 			m_objectLayer->setScale(f->m_lastScale);
+			// это нужно вызывать с моими значениями у m_objectLayer
 			GJBaseGameLayer::updateDebugDraw();
 			m_objectLayer->setPosition(oldPos);
 			m_objectLayer->setScale(oldZoom);
@@ -195,10 +209,25 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		}
 	}
 
+	
 	$override
 	void processAreaEffects(gd::vector<EnterEffectInstance>* p0, GJAreaActionType p1, float p2, bool p3) {
-		
-		GJBaseGameLayer::processAreaEffects(p0, p1, p2, p3);
+		auto f = m_fields.self();
+		if (f->m_enabled) {
+			auto oldZoom = m_gameState.m_cameraZoom;
+			auto oldAngle = m_gameState.m_cameraAngle;
+			auto oldPos2 = m_gameState.m_cameraPosition2;
+			m_gameState.m_cameraZoom = f->m_originalValues.m_oldGameStateZoom;
+			m_gameState.m_cameraAngle = f->m_originalValues.m_oldGameStateCameraAngle;
+			m_gameState.m_cameraPosition2 = f->m_originalValues.m_oldGameStateCameraPos2;
+			// это нужно вызывать с ориг. значениями у m_cameraZoom, m_cameraAngle, m_cameraPosition2
+			GJBaseGameLayer::processAreaEffects(p0, p1, p2, p3);
+			m_gameState.m_cameraZoom = oldZoom;
+			m_gameState.m_cameraAngle = oldAngle;
+			m_gameState.m_cameraPosition2 = oldPos2;
+		} else {
+			GJBaseGameLayer::processAreaEffects(p0, p1, p2, p3);
+		}
 	}
 };
 
@@ -218,9 +247,9 @@ class $modify(LevelEditorLayer) {
 		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
 		if (f->m_enabled) {
 
-			auto oldZoom = m_gameState.m_cameraZoom;
-			auto oldAngle = m_gameState.m_cameraAngle;
-			auto oldPos2 = m_gameState.m_cameraPosition2;
+			f->m_originalValues.m_oldGameStateZoom = m_gameState.m_cameraZoom;
+			f->m_originalValues.m_oldGameStateCameraAngle = m_gameState.m_cameraAngle;
+			f->m_originalValues.m_oldGameStateCameraPos2 = m_gameState.m_cameraPosition2;
 
 			if (f->m_staticZoomEnabled) m_gameState.m_cameraZoom = f->m_staticZoom;
 			if (f->m_staticRotEnabled) m_gameState.m_cameraAngle = 0;
@@ -231,15 +260,16 @@ class $modify(LevelEditorLayer) {
 				auto winCenterInEditorScale = hws / m_gameState.m_cameraZoom;
 				m_gameState.m_cameraPosition2 = f->m_staticCenterPos - winCenterInEditorScale;
 			} else {
-				auto diffInEditorCoords = hws * (1 / oldZoom - 1 / m_gameState.m_cameraZoom);
+				auto diffInEditorCoords = hws * (1 / f->m_originalValues.m_oldGameStateZoom - 1 / m_gameState.m_cameraZoom);
 				m_gameState.m_cameraPosition2 = m_gameState.m_cameraPosition2 + diffInEditorCoords;
 			}
 
+			// это нужно вызывать с моими значениями у m_cameraZoom, m_cameraAngle, m_cameraPosition2
 			LevelEditorLayer::updateVisibility(p0);
 
-			m_gameState.m_cameraZoom = oldZoom;
-			m_gameState.m_cameraAngle = oldAngle;
-			m_gameState.m_cameraPosition2 = oldPos2;
+			m_gameState.m_cameraZoom = f->m_originalValues.m_oldGameStateZoom;
+			m_gameState.m_cameraAngle = f->m_originalValues.m_oldGameStateCameraAngle;
+			m_gameState.m_cameraPosition2 = f->m_originalValues.m_oldGameStateCameraPos2;
 
 		} else {
 			LevelEditorLayer::updateVisibility(p0);
@@ -277,7 +307,7 @@ class $modify(LevelEditorLayer) {
 		auto pos = m_objectLayer->getPosition();
 		auto scale = m_objectLayer->getScale();
 		LevelEditorLayer::onStopPlaytest();
-
+		
 		if (mode == PlaybackMode::Paused) {
 			queueInMainThread([this, pos, scale] {
 				reinterpret_cast<MyGJBaseGameLayer*>(this)->restoreStaticCamera(pos, scale);

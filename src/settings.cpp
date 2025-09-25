@@ -3,12 +3,13 @@
 using namespace geode::prelude;
 
 #include <Geode/modify/EditorPauseLayer.hpp>
+#include <Geode/ui/GeodeUI.hpp>
 
 
 class PlaytestCameraSettingsPopup : public Popup<int> {
 public:
-    const float m_width = 200.f;
-    const float m_height = 190.f;
+    const float m_width = 210.f;
+    const float m_height = 200.f;
     float m_currPos = -30.f;
     Ref<CCMenuItemToggler> m_pauseMenuToggler{};
 
@@ -66,7 +67,8 @@ public:
                 "- <cp>Static position</c>: ignore any camera movement.\n"
                 "- <cp>Static zoom</c>: ignore any camera zooming.\n"
                 "- <cp>Static rotation</c>: ignore any camera rotation.\n"
-                "- <co>Show edges</c>: show original camera bounds.\n", 
+                "- <co>Show edges</c>: show original camera bounds.\n"
+                "<cg>Use 'F7' key for quicker access to this menu</c>", 
                 0.75
             ), 
             Anchor::TopRight, ccp(-18, -18)
@@ -87,6 +89,15 @@ public:
         m_staticRot = createToggler("Static rotation", 4);
         createSeparator();
         m_windowRect = createToggler("Show edges", 5);
+
+        auto optionsSpr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn_001.png");
+        optionsSpr->setScale(0.6f);
+        m_buttonMenu->addChildAtPosition(
+            CCMenuItemSpriteExtra::create(
+                optionsSpr, this, menu_selector(PlaytestCameraSettingsPopup::onModSettings)
+            ),
+            Anchor::BottomRight, ccp(-30, 30)
+        );
 
         m_enabled->toggle(Mod::get()->getSavedValue<bool>("enabled", true));
         m_staticPos->toggle(Mod::get()->getSavedValue<bool>("static_pos", true));
@@ -128,6 +139,10 @@ public:
         Mod::get()->setSavedValue<bool>("static_rot", m_staticRot->isOn());
         Mod::get()->setSavedValue<bool>("window_rect", m_windowRect->isOn());
         Popup::onClose(obj);
+    }
+
+    void onModSettings(CCObject*) {
+        openSettingsPopup(Mod::get(), true);
     }
 };
 
@@ -199,4 +214,32 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
         popup->show();
     }
 };
+
+// keybinds
+#ifdef GEODE_IS_DESKTOP
+	#include <geode.custom-keybinds/include/Keybinds.hpp>
+	$execute {
+		keybinds::BindManager::get()->registerBindable({
+			"open-playtest-settings"_spr, "Open playtest settings",
+			"Open settings",
+			{ keybinds::Keybind::create(KEY_F7) },
+			"Improved Playtest"
+		});
+
+        new EventListener([=](keybinds::InvokeBindEvent* event) {
+            if (event->isDown()) {
+                if (auto lel = LevelEditorLayer::get()) {
+                    if (auto oldPopup = CCScene::get()->getChildByID("playtest-camera-settings-popup"_spr)) {
+                        static_cast<PlaytestCameraSettingsPopup*>(oldPopup)->onClose(nullptr);
+                        return ListenerResult::Stop;
+                    } else if (lel->m_playbackMode == PlaybackMode::Not) {
+                        PlaytestCameraSettingsPopup::create()->show();
+                        return ListenerResult::Stop;
+                    }
+                }
+            }
+        	return ListenerResult::Propagate;
+        }, keybinds::InvokeBindFilter(nullptr, "open-playtest-settings"_spr));
+    }
+#endif
 

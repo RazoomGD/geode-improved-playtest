@@ -8,7 +8,7 @@
 	},
 	"id": "razoom.improved_playtest",
 	"name": "Improved Playtest",
-	"version": "v1.0.0",
+	"version": "v1.0.1",
 	"developer": "RaZooM",
 	"description": "Adds useful options to the playtest",
 
@@ -18,6 +18,12 @@
 	},
 
 	"dependencies": {
+		"geode.custom-keybinds": {
+			"importance": "required",
+			"version": ">=v1.10.0",
+			"platforms": ["win", "mac", "mac-intel", "mac-arm"]
+		},
+		
 		"ninkaz.middle-click-panning": {
 			"version": ">=1.0.0",
 			"importance": "recommended",
@@ -25,5 +31,14 @@
 		}
 	},
 
-	"tags": ["editor", "utility", "enhancement", "customization"]
+	"tags": ["editor", "utility", "enhancement", "customization"],
+
+	"settings": {
+		"fix-startpos-camera-bug": {
+			"name": "Fix startpos camera bug",
+			"description": "Fix <cb>RobTop's</c> camera <cr>bug</c> where the camera malfunctions when starting playtest from a start position with any camera triggers placed before it.\n\n<co>Note:</c> This fix will become permanently enabled soon",
+			"type": "bool",
+			"default": true
+		}
+	}
 }

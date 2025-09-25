@@ -59,6 +59,11 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 		} m_originalValues;
 
 		Ref<CCDrawNode> m_drawWinRectNode;
+
+		struct {
+			bool m_shouldInsertCameraUpdate{};
+			bool m_enableFix{};
+		} m_startposCameraFix;
 	};
 
 
@@ -229,6 +234,25 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 			GJBaseGameLayer::processAreaEffects(p0, p1, p2, p3);
 		}
 	}
+
+	// -------------------------- RobTop's camera bug fix --------------------------
+
+	void loadStartPosObject() {
+		auto f = m_fields.self();
+		f->m_startposCameraFix.m_shouldInsertCameraUpdate = f->m_startposCameraFix.m_enableFix;
+		GJBaseGameLayer::loadStartPosObject();
+		f->m_startposCameraFix.m_shouldInsertCameraUpdate = false;
+	}
+
+	void processMoveActionsStep(float p0, bool p1) {
+		GJBaseGameLayer::processMoveActionsStep(p0, p1);
+		if (m_fields->m_startposCameraFix.m_shouldInsertCameraUpdate) {
+			// yoinked this piece of code from GJBaseGameLayer::update() - addr: 0x233030
+			m_gameState.processStateTriggers();
+			m_gameState.updateTweenActions(p0);
+			updateCamera(p0);
+		}
+	}
 };
 
 
@@ -291,6 +315,8 @@ class $modify(LevelEditorLayer) {
 		
 		f->m_staticCenterPos = camCenter;
 		f->m_staticZoom = zoom;
+
+		f->m_startposCameraFix.m_enableFix = Mod::get()->getSettingValue<bool>("fix-startpos-camera-bug");
 	}
 	
 	

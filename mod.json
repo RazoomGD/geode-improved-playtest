@@ -8,7 +8,7 @@
 	},
 	"id": "razoom.improved_playtest",
 	"name": "Improved Playtest",
-	"version": "v1.0.1",
+	"version": "v1.0.2",
 	"developer": "RaZooM",
 	"description": "Adds useful options to the playtest",
 
@@ -18,6 +18,11 @@
 	},
 
 	"dependencies": {
+		"geode.node-ids": {
+			"importance": "required",
+			"version": ">=1.17.0"
+		},
+		
 		"geode.custom-keybinds": {
 			"importance": "required",
 			"version": ">=v1.10.0",

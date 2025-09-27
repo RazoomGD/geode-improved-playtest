@@ -1,3 +1,6 @@
+# 1.0.3
+- Added optional custom keybinds
+
 # 1.0.1
 - Fixed RobTop's bug that completely freaks out cam (thanks to @Brittank for telling me about this bug)
 - Added the keybind for quick access to settings (default is `F7`)

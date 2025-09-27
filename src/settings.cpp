@@ -217,16 +217,19 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
 
 // keybinds
 #ifdef GEODE_IS_DESKTOP
-	#include <geode.custom-keybinds/include/Keybinds.hpp>
+	#include <geode.custom-keybinds/include/OptionalAPI.hpp>
 	$execute {
-		keybinds::BindManager::get()->registerBindable({
-			"open-playtest-settings"_spr, "Open playtest settings",
-			"Open settings",
-			{ keybinds::Keybind::create(KEY_F7) },
-			"Improved Playtest"
-		});
+        (void)[&]() -> Result<> {
+            GEODE_UNWRAP(keybinds::BindManagerV2::registerBindable(GEODE_UNWRAP(keybinds::BindableActionV2::create(
+                "open-playtest-settings"_spr, "Open playtest settings",
+			    "Open settings",
+                { GEODE_UNWRAP(keybinds::KeybindV2::create(KEY_F7, keybinds::ModifierV2::None)) },
+                GEODE_UNWRAP(keybinds::CategoryV2::create("Improved Playtest"))
+            ))));
+            return Ok();
+        }();
 
-        new EventListener([=](keybinds::InvokeBindEvent* event) {
+        new EventListener([=](keybinds::InvokeBindEventV2* event) {
             if (event->isDown()) {
                 if (auto lel = LevelEditorLayer::get()) {
                     if (auto oldPopup = CCScene::get()->getChildByID("playtest-camera-settings-popup"_spr)) {
@@ -239,7 +242,7 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
                 }
             }
         	return ListenerResult::Propagate;
-        }, keybinds::InvokeBindFilter(nullptr, "open-playtest-settings"_spr));
+        }, keybinds::InvokeBindFilterV2(nullptr, "open-playtest-settings"_spr));
     }
 #endif
 

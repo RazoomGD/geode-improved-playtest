@@ -220,12 +220,16 @@ class $modify(MyPauseLayer, EditorPauseLayer) {
 	#include <geode.custom-keybinds/include/OptionalAPI.hpp>
 	$execute {
         (void)[&]() -> Result<> {
-            GEODE_UNWRAP(keybinds::BindManagerV2::registerBindable(GEODE_UNWRAP(keybinds::BindableActionV2::create(
-                "open-playtest-settings"_spr, "Open playtest settings",
-			    "Open settings",
-                { GEODE_UNWRAP(keybinds::KeybindV2::create(KEY_F7, keybinds::ModifierV2::None)) },
-                GEODE_UNWRAP(keybinds::CategoryV2::create("Improved Playtest"))
-            ))));
+            GEODE_UNWRAP_INTO(auto key, keybinds::KeybindV2::create(KEY_F7, keybinds::ModifierV2::None));
+            GEODE_UNWRAP_INTO(auto category, keybinds::CategoryV2::create("Improved Playtest"));
+            GEODE_UNWRAP_INTO(auto bindAction, keybinds::BindableActionV2::create(
+                "open-playtest-settings"_spr, 
+                "Open playtest settings",
+                "Open settings",
+                {key}, category
+            ));
+            GEODE_UNWRAP(keybinds::BindManagerV2::registerBindable(bindAction));
+            
             return Ok();
         }();
 

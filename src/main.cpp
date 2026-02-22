@@ -1,14 +1,9 @@
-#include <Geode/Geode.hpp>
-
-using namespace geode::prelude;
+#include "settings.hpp"
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/EditorUI.hpp>
 
-#ifdef GEODE_IS_WINDOWS
-	#include <Geode/modify/CCEGLView.hpp>
-#endif
 
 #include <numbers>
 
@@ -256,12 +251,46 @@ class $modify(MyGJBaseGameLayer, GJBaseGameLayer) {
 };
 
 
-class $modify(LevelEditorLayer) {
+class $modify(MyLevelEditorLayer, LevelEditorLayer) {
+
+	struct Fields {
+        ListenerHandle m_clickListener;
+        CCPoint m_prevMousePos;
+    };
 
 	$override
 	bool init(GJGameLevel* p0, bool p1) {
 		if (!LevelEditorLayer::init(p0, p1)) return false;
 		reinterpret_cast<MyGJBaseGameLayer*>(this)->setupModDebugDrawNode();
+
+		// init panning
+		auto dragButton = getDragButton();
+        m_fields->m_clickListener = MouseInputEvent().listen([this, dragButton](MouseInputData& data) {
+            if (data.button != dragButton || m_playbackMode != PlaybackMode::Playing) return;
+            if (data.action == MouseInputData::Action::Press) {
+				// start panning
+				m_fields->m_prevMousePos = getMousePos();
+				schedule(schedule_selector(MyLevelEditorLayer::updatePanning));
+            } else if (data.action == MouseInputData::Action::Release) {
+				// stop panning
+                unschedule(schedule_selector(MyLevelEditorLayer::updatePanning));
+            }
+        });
+
+		// init keybinds
+		addEventListener(KeybindSettingPressedEventV3(GEODE_MOD_ID, "open-popup"), [this](const Keybind& keybind, bool down, bool repeat, double timestamp) {
+            if (down && !repeat) {
+				if (auto oldPopup = CCScene::get()->getChildByID("playtest-camera-settings-popup"_spr)) {
+					static_cast<PlaytestCameraSettingsPopup*>(oldPopup)->onClose(nullptr);
+					return ListenerResult::Stop;
+				} else if (m_playbackMode == PlaybackMode::Not) {
+					PlaytestCameraSettingsPopup::create()->show();
+					return ListenerResult::Stop;
+				}
+            }
+			return ListenerResult::Propagate;
+        });
+
 		return true;
 	}
 
@@ -357,15 +386,46 @@ class $modify(LevelEditorLayer) {
 	}
 
 
-	$override
-	void onResumePlaytest() {
-		updatePlaytestValues();
-		LevelEditorLayer::onResumePlaytest();
-	}
+	// got inlined in 2.208 soooo... use EditorUI::OnPlaytest
+	// $override
+	// void onResumePlaytest() {
+	// 	updatePlaytestValues();
+	// 	LevelEditorLayer::onResumePlaytest();
+	// }
+
+
+	// ------------ Middle click panning (Yoinked from Ninkaz's mod) --------------
+
+    void updatePanning(float) {
+        if (m_playbackMode != PlaybackMode::Playing) { // stop panning
+            unschedule(schedule_selector(MyLevelEditorLayer::updatePanning));
+            return;
+        }
+
+        CCPoint diff = getMousePos() - m_fields->m_prevMousePos;
+        m_fields->m_prevMousePos = getMousePos();
+
+		auto f = reinterpret_cast<MyGJBaseGameLayer*>(this)->m_fields.self();
+		if (f->m_enabled && f->m_staticCameraEnabled) {
+			float zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_gameState.m_cameraZoom;
+			f->m_staticCenterPos -= diff / zoom;
+		}
+    }
+
+    MouseInputData::Button getDragButton() {
+		if (auto mkp = Loader::get()->getLoadedMod("ninkaz.middle-click-panning")) {
+			switch (hash(mkp->getSettingValue<std::string>("drag-button"))) {
+				case hash("Right Click"): return MouseInputData::Button::Right;
+				case hash("Middle Click"): return MouseInputData::Button::Middle;
+				case hash("Side Button 1"): return MouseInputData::Button::Button4;
+				case hash("Side Button 2"): return MouseInputData::Button::Button5;
+			}
+			return MouseInputData::Button::Right;
+		}
+        return MouseInputData::Button::Middle;
+    }
 };
 
-
-#ifdef GEODE_IS_DESKTOP
 
 class $modify(MyEditorUI, EditorUI) {
 
@@ -373,6 +433,14 @@ class $modify(MyEditorUI, EditorUI) {
 		if (!self.setHookPriority("EditorUI::scrollWheel", Priority::VeryEarly)) {
 			log::warn("Failed to set hook priority");
 		}
+	}
+
+	void onPlaytest(CCObject* sender) {
+		if (m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
+			// playtest start or resume
+			reinterpret_cast<MyLevelEditorLayer*>(m_editorLayer)->updatePlaytestValues();
+		}
+		EditorUI::onPlaytest(sender);
 	}
 
 
@@ -420,52 +488,5 @@ class $modify(MyEditorUI, EditorUI) {
 			}
 		}
 	}
-
-
-	void onMiddleClickPanning(CCPoint diff) {
-		auto f = reinterpret_cast<MyGJBaseGameLayer*>(m_editorLayer)->m_fields.self();
-		if (!f->m_enabled || m_editorLayer->m_playbackMode != PlaybackMode::Playing) {
-			return;
-		}
-		if (f->m_staticCameraEnabled) {
-			float zoom = f->m_staticZoomEnabled ? f->m_staticZoom : m_editorLayer->m_gameState.m_cameraZoom;
-			f->m_staticCenterPos += diff / zoom;
-		}
-	}
 };
 
-#ifdef GEODE_IS_WINDOWS
-
-bool isPanning{};
-CCPoint lastClick{};
-
-class $modify(CCEGLView) {
-    $override 
-	void onGLFWMouseCallBack(GLFWwindow* window, int button, int action, int mods) {
-		CCEGLView::onGLFWMouseCallBack(window, button, action, mods);
-		if (button != GLFW_MOUSE_BUTTON_MIDDLE) return;
-
-		if (action == GLFW_PRESS) {
-			isPanning = true;
-			lastClick = getMousePos();
-		} else {
-			isPanning = false;
-		}
-	}
-
-
-    $override 
-	void onGLFWMouseMoveCallBack(GLFWwindow* window, double x, double y) {
-		CCEGLView::onGLFWMouseMoveCallBack(window, x, y);
-		if (!isPanning) return;
-		if (auto editor = EditorUI::get()) {
-			auto pos = getMousePos();
-			reinterpret_cast<MyEditorUI*>(editor)->onMiddleClickPanning(lastClick - pos);
-			lastClick = pos;
-		}
-	}
-};
-
-#endif
-
-#endif

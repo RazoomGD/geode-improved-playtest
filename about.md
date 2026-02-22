@@ -4,6 +4,8 @@ Are you annoyed that game always teleports you to your icon and forces camera zo
 
 Then this mod is exactly what you need!
 
+___
+
 ## <cg>Features</c>
 
 - <co>Static camera</c> - keep the camera static during playtesting
@@ -31,6 +33,7 @@ ___
 
 - [Middle click panning](mod:ninkaz.middle-click-panning) by NinKaz – for full support of middle click panning.
 
+___
 
 ## Contribution
 

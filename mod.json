@@ -1,14 +1,14 @@
 {
-	"geode": "4.9.0",
+	"geode": "5.0.0-beta.3",
 	"gd": {
-		"win": "2.2074",
-		"android": "2.2074",
-		"mac": "2.2074",
-		"ios": "2.2074"
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
 	},
 	"id": "razoom.improved_playtest",
 	"name": "Improved Playtest",
-	"version": "v1.0.3",
+	"version": "v1.0.4",
 	"developer": "RaZooM",
 	"description": "Adds useful options to the playtest",
 
@@ -18,21 +18,12 @@
 	},
 
 	"dependencies": {
-		"geode.node-ids": {
-			"importance": "required",
-			"version": ">=1.17.0"
-		},
-		
-		"geode.custom-keybinds": {
-			"importance": "recommended",
-			"version": ">=v1.11.0",
-			"platforms": ["win", "mac", "mac-intel", "mac-arm"]
-		},
+		"geode.node-ids": ">=1.22.0",
 		
 		"ninkaz.middle-click-panning": {
 			"version": ">=1.0.0",
-			"importance": "recommended",
-			"platforms": ["win"]
+			"required": false,
+			"platforms": ["win", "mac"]
 		}
 	},
 
@@ -41,9 +32,19 @@
 	"settings": {
 		"fix-startpos-camera-bug": {
 			"name": "Fix startpos camera bug",
-			"description": "Fix <cb>RobTop's</c> camera <cr>bug</c> where the camera malfunctions when starting playtest from a start position with any camera triggers placed before it.\n\n<co>Note:</c> This fix will become permanently enabled soon",
+			"description": "Fix <cb>RobTop's</c> camera <cr>bug</c> when camera malfunctions if level is played from the start position and has camera triggers with enabled smooth velocity before it",
 			"type": "bool",
 			"default": true
+		},
+
+		"Keybinds": {"type": "title"},
+
+		"open-popup": {
+			"type": "keybind",
+			"default": "F10",
+			"name": "Open settings panel",
+			"description": "Open popup with mod settings \n(by default it can be opened by clicking on '+' button in editor pause menu)",
+			"category": "editor"
 		}
 	}
 }
